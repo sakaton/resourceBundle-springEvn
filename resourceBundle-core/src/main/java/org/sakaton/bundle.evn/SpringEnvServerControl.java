@@ -34,8 +34,6 @@ public class SpringEnvServerControl extends ResourceBundle.Control {
 	 */
 	private final String[] ADDRESS_LOCAL = {"bootstrapProperties", "NACOS"};
 
-	private final static String DEFAULT_GROUP_NAME = "DEFAULT_GROUP";
-
 	private final Charset charset;
 
 	private final String baseName;
@@ -96,9 +94,6 @@ public class SpringEnvServerControl extends ResourceBundle.Control {
 		if (Objects.isNull(configurableEnvironment)){
 			return null;
 		}
-		// 注意此处 资源名称默认添加分组  messages_en.properties,DEFAULT_GROUP
-		resourceName = resourceName.concat(",").concat(DEFAULT_GROUP_NAME);
-
 		String[] paths = ArrayUtils.add(ADDRESS_LOCAL, resourceName);
 		PropertySources propertySources = configurableEnvironment.getPropertySources();
 		PropertySource<?> propertySource = null;
@@ -108,7 +103,7 @@ public class SpringEnvServerControl extends ResourceBundle.Control {
 					Collection<PropertySource<?>> collection = CompositePropertySource.class.cast(propertySource).getPropertySources();
 					PropertySource<?> result = null;
 					for (PropertySource<?> property : collection) {
-						if (StringUtils.equalsIgnoreCase(property.getName(), name)) {
+						if (StringUtils.startsWithIgnoreCase(property.getName(), name))  {
 							result = property;
 						}
 					}
