@@ -11,7 +11,7 @@ import java.util.ServiceLoader;
 import java.util.spi.ResourceBundleControlProvider;
 
 /**
- * @author zhengshijun
+ * @author sakaton
  * @version created on 2020/9/4.
  */
 public class LocaleMessageBundle {

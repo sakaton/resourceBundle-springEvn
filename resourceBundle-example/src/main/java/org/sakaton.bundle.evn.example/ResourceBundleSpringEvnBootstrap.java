@@ -6,7 +6,7 @@ import org.springframework.context.ConfigurableApplicationContext;
 import org.springframework.context.annotation.AnnotationConfigApplicationContext;
 
 /**
- * @author zhengshijun
+ * @author sakaton
  * @version created on 2020/9/5.
  */
 public class ResourceBundleSpringEvnBootstrap {
