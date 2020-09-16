@@ -4,6 +4,8 @@ import org.apache.commons.lang3.ArrayUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.context.ApplicationContext;
+import org.springframework.context.ConfigurableApplicationContext;
 import org.springframework.core.env.CompositePropertySource;
 import org.springframework.core.env.ConfigurableEnvironment;
 import org.springframework.core.env.PropertySource;
@@ -28,17 +30,15 @@ public class SpringEnvServerControl extends ResourceBundle.Control {
 
 	private final static Logger log = LoggerFactory.getLogger(SpringEnvServerControl.class);
 
-	/**
-	 *  注意此处
-	 *  默认获取的是 bootstrap.yml 配置的NACOS
-	 */
+	private final static String REFRESH_EVENT_CLASS_NAME = "org.springframework.cloud.endpoint.event.RefreshEvent";
+
 	private final String[] ADDRESS_LOCAL = {"bootstrapProperties", "NACOS"};
 
 	private final Charset charset;
 
 	private final String baseName;
 
-	private final static Map<String, PropertySource<?>> CACHE_SOURCE = new HashMap<>();
+	private final static Map<String, PropertySource<?>> CACHE_SOURCE = new HashMap<>(16);
 
 	public SpringEnvServerControl(Charset charset, String baseName) {
 		this.charset = charset;
@@ -75,37 +75,53 @@ public class SpringEnvServerControl extends ResourceBundle.Control {
 		} else if ("java.properties".equals(format)) {
 			String resourceName = toResourceName(bundleName, "properties");
 			resourceName = new File(resourceName).getName();
-			PropertySource<?> propertySource = getPropertySource(resourceName);
+			bundle = new PropertySourceBundle();
+			PropertySource<?> propertySource = getPropertySource((PropertySourceBundle) bundle, resourceName);
 			if (Objects.isNull(propertySource)) {
 				log.warn("propertySource is null resourceName:{}", resourceName);
 				return super.newBundle(baseName, locale, format, loader, reload);
 			}
 			log.info("resourceName :{} loading result :{}", resourceName, propertySource);
-			bundle = new PropertySourceBundle(propertySource);
+			((PropertySourceBundle) bundle).refresh(propertySource);
 		}
 		return bundle;
 	}
 
-	private PropertySource<?> getPropertySource(String resourceName) {
+	private PropertySource<?> getPropertySource(PropertySourceBundle propertySourceBundle, final String resourceName) {
 		if (CACHE_SOURCE.containsKey(resourceName)) {
 			return CACHE_SOURCE.get(resourceName);
 		}
-		ConfigurableEnvironment configurableEnvironment = SpringContextLocal.getEnvironment();
-		if (Objects.isNull(configurableEnvironment)){
+		ApplicationContext applicationContext = SpringContextLocal.getApplicationContext();
+		if (Objects.isNull(applicationContext) || !(applicationContext instanceof ConfigurableApplicationContext)) {
 			return null;
 		}
+		ConfigurableApplicationContext configurable = ConfigurableApplicationContext.class.cast(applicationContext);
+		ConfigurableEnvironment configurableEnvironment = configurable.getEnvironment();
+		configurable.addApplicationListener(event -> {
+			if (event.getClass().getName().equals(REFRESH_EVENT_CLASS_NAME)) {
+				PropertySource<?> propertySource = doLoad(resourceName, configurableEnvironment);
+				propertySourceBundle.refresh(propertySource);
+			}
+		});
+		return doLoad(resourceName, configurableEnvironment);
+	}
+
+
+	private PropertySource<?> doLoad(final String resourceName, ConfigurableEnvironment configurableEnvironment) {
 		String[] paths = ArrayUtils.add(ADDRESS_LOCAL, resourceName);
 		PropertySources propertySources = configurableEnvironment.getPropertySources();
 		PropertySource<?> propertySource = null;
+		log.info("PropertySource paths : {}", StringUtils.join(paths, ","));
 		for (String name : paths) {
 			if (Objects.nonNull(propertySource)) {
 				if (propertySource instanceof CompositePropertySource) {
 					Collection<PropertySource<?>> collection = CompositePropertySource.class.cast(propertySource).getPropertySources();
 					PropertySource<?> result = null;
 					for (PropertySource<?> property : collection) {
-						if (StringUtils.startsWithIgnoreCase(property.getName(), name))  {
+						if (StringUtils.startsWithIgnoreCase(property.getName(), name)) {
 							result = property;
 						}
+						log.debug("foreach source name :{}", property.getName());
 					}
 					propertySource = result;
 				}
@@ -113,8 +129,8 @@ public class SpringEnvServerControl extends ResourceBundle.Control {
 				propertySource = propertySources.get(name);
 			}
 		}
-		if (Objects.nonNull(propertySource)){
-			CACHE_SOURCE.put(resourceName,propertySource);
+		if (Objects.nonNull(propertySource)) {
+			CACHE_SOURCE.put(resourceName, propertySource);
 		}
 		return propertySource;
 	}

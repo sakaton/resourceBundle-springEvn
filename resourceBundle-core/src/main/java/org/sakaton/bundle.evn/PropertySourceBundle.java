@@ -1,5 +1,6 @@
 package org.sakaton.bundle.evn;
 
+import org.apache.commons.lang3.StringUtils;
 import org.springframework.core.env.PropertySource;
 
 import java.util.Collection;
@@ -8,6 +9,7 @@ import java.util.Iterator;
 import java.util.Map;
 import java.util.Objects;
 import java.util.ResourceBundle;
+import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * @author sakaton
@@ -15,24 +17,41 @@ import java.util.ResourceBundle;
  */
 public class PropertySourceBundle extends ResourceBundle {
 
-	private final PropertySource<?> propertySource;
+	private Map<String, Object> source = new ConcurrentHashMap<>(128);
+
+	private PropertySource<?> original;
 
 	public PropertySourceBundle(PropertySource<?> propertySource) {
-		this.propertySource = propertySource;
+		refresh(propertySource);
+	}
+	public PropertySourceBundle(){
+
 	}
 
 	@Override
 	protected Object handleGetObject(String key) {
-		return propertySource.getProperty(key);
+		key = StringUtils.upperCase(StringUtils.trim(key));
+		return Objects.nonNull(source) ? source.get(key) : null;
 	}
 
-
-	@SuppressWarnings("unchecked")
 	@Override
 	public Enumeration<String> getKeys() {
-		Object source = propertySource.getSource();
-		Map<String, String> map = (Map<String, String>) source;
-		return toEnumerate(map.keySet());
+		return toEnumerate(source.keySet());
+	}
+
+	@SuppressWarnings("unchecked")
+	public void refresh(PropertySource<?> propertySource){
+		if (original == propertySource){
+			return;
+		}
+		original = propertySource;
+		if (Objects.nonNull(original) && original.getSource() instanceof Map) {
+			Map<String, Object> source = (Map<String, Object>) original.getSource();
+			this.source.clear();
+			source.forEach((key, value) -> this.source.put(StringUtils.upperCase(StringUtils.trim(key)), value));
+		} else {
+			source = null;
+		}
 	}
 
 	/**
